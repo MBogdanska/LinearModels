@@ -1,0 +1,141 @@
+---
+title: "PracaDom6_MBogdańska"
+author: "Magdalena Bogdańska"
+date: "Modele liniowe i mieszane"
+output: 
+  html_document:
+    toc: TRUE
+---
+Task:
+
+Create following scenarios:
+
+Generate continuous variable X_1 from distribution U[0,1]. Generate categorical variable X_2 with 2 levels with equal frequency). Generate Y in a way that it depends on interaction of X_1 and X_2.
+
+Add random noise from N(0,1), all ANCOVA assumptions are met.
+Choose other distribution for epsilons, find a distribution with the same scale as N(0,1) for which you will get drop in power.
+Choose other distribution for epsilons in a way that the test for residual will not keep I type error rate.
+
+For all these scenarios, produce plot that will compare power as a function of sample size. Moreover on this plot is should be visible that power for scenario 2 is lower than for scenario 1. And that I type error rate is different for scenario 3 and scenario 1.
+-------------------------------------------------------------------------------------------
+## Example for first scenario.
+```{r, warning=FALSE, message=FALSE}
+set.seed(77)
+n<-100
+
+X_2<-rep(c("lev1","lev2"), length.out=n)
+X_1<-runif(n)
+data <- merge(X_2,X_1)
+names(data)<-c("categ","cont")
+Y<- rnorm(n)+ ifelse(data$categ=="lev1" & data$cont<0.3, 1.5, 0.5) + ifelse(data$categ=="lev2"& data$cont>0.5,1,0) 
+# nested effect for level "lev1" is (0,0,1), for level "lev2": (0,0,1)
+# additionally mean of variable Y is greater by 0.5 when continuous variable "contin" is lower than 0.3
+
+# Y<- ifelse(data$categ=="lev1",data$cont,data$cont^3+data$cont)
+
+dat<-data.frame(data,Y)
+names(dat)<-c("categ","cont","final")   
+attach(dat)
+
+# One can see relations in data based on the folllowing plots:
+library(ggplot2)
+ggplot(dat, aes(x=cont, y=final, colour=categ)) + geom_point()+ geom_smooth(method="lm", formula=y~x, se=FALSE)
+
+library(lattice)
+xyplot(final~cont|categ,type=c("p","r"),data=dat)
+
+library(nlme)
+lmList(final~cont|categ,data=dat)
+# as we see value of variable "final" differ for different levels.
+
+summary(aov(final~cont*categ))[[1]]
+
+summary(aov(final~cont*categ))[[1]][3,5] #p-value for interactions
+```
+## Simulation procedure for first scenario
+```{r, warning=FALSE, message=FALSE}
+# function which extracts p-values for certain sample size
+pvals <- function(n){
+
+  X_2<-rep(c("lev1","lev2"), length.out=n)
+  X_1<-runif(n)
+  data <- merge(X_2,X_1)
+  names(data)<-c("categ","cont")
+  Y<- rnorm(n)+ ifelse(data$categ=="lev1" & data$cont<0.3, 1.5, 0.5) + ifelse(data$categ=="lev2"& data$cont>0.5,1,0) 
+  
+  dat<-data.frame(data,Y)
+  names(dat)<-c("categ","cont","final")   
+  
+  summary(aov(final~cont*categ, data=dat))[[1]][3,5]
+}
+
+# function calculating power of the test for selected numer of replications and significance level
+power <- function (n, alpha) {
+  p_vals <- replicate(H, pvals(n))
+  mean(p_vals < alpha)
+}
+```
+## Simulation procedure for second scenario
+```{r, warning=FALSE, message=FALSE}
+# function which extracts p-values for certain sample size
+pvals2 <- function(n){
+
+  X_2<-rep(c("lev1","lev2"), length.out=n)
+  X_1<-runif(n)
+  data <- merge(X_2,X_1)
+  names(data)<-c("categ","cont")
+  Y<- rt(n,df=20)+ ifelse(data$categ=="lev1" & data$cont<0.3, 1.5, 0.5) + ifelse(data$categ=="lev2"& data$cont>0.5,1,0) 
+  
+  dat<-data.frame(data,Y)
+  names(dat)<-c("categ","cont","final")   
+  
+  summary(aov(final~cont*categ, data=dat))[[1]][3,5]
+}
+
+# function calculating power of the test for selected numer of replications and significance level
+power2 <- function (n, alpha) {
+  p_vals <- replicate(H, pvals2(n))
+  mean(p_vals < alpha)
+}
+
+``` 
+
+## Simulation procedure for third scenario
+```{r, warning=FALSE, message=FALSE}
+# function which extracts p-values for certain sample size
+pvals3 <- function(n){
+
+  X_2<-rep(c("lev1","lev2"), length.out=n)
+  X_1<-runif(n)
+  data <- merge(X_2,X_1)
+  names(data)<-c("categ","cont")
+  Y<- runif(n)+ ifelse(data$categ=="lev1" & data$cont<0.3, 1.5, 0.5) + ifelse(data$categ=="lev2"& data$cont>0.5,1,0) 
+  
+  dat<-data.frame(data,Y)
+  names(dat)<-c("categ","cont","final")   
+  
+  summary(aov(final~cont*categ, data=dat))[[1]][3,5]
+}
+
+# function calculating power of the test for selected numer of replications and significance level
+power3 <- function (n, alpha) {
+  p_vals <- replicate(H, pvals3(n))
+  p_vals <- p.adjust(p_vals, method = "holm") # I use FWER criterion
+  mean(p_vals < alpha)
+}
+```
+
+## Power of tests for two scenarios
+```{r, warning=FALSE, message=FALSE}
+H<-500
+alpha<-0.05 # significance level
+
+size <- seq(30, 100, by=1) #sample size
+power1 <- sapply(size, function (x) power(x, alpha))
+power2 <- sapply(size, function (x) power2(x, alpha))
+power3 <- sapply(size, function (x) power3(x, alpha))
+
+plot(size,power1, main = "Relation between power of test and sample size", type = "l", col='green')
+line(size,power2, col='blue')
+line(size,power3, col='red')
+```
