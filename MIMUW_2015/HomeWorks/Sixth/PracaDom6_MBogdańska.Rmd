@@ -1,0 +1,165 @@
+---
+title: "PracaDom6_MBogdańska"
+author: "Magdalena Bogdańska"
+date: "Modele liniowe i mieszane"
+output: 
+  html_document:
+    toc: TRUE
+---
+## Task
+
+Create following scenarios:
+
+Generate continuous variable X_1 from distribution U[0,1]. Generate categorical variable X_2 with 2 levels with equal frequency. 
+Generate Y in a way that it depends on interaction of X_1 and X_2.
+
+Add random noise from N(0,1), all ANCOVA assumptions are met.
+Choose other distribution for epsilons, find a distribution with the same scale as N(0,1) for which you will get drop in power.
+Choose other distribution for epsilons in a way that the test for residual will not keep I type error rate.
+
+For all these scenarios, produce plot that will compare power as a function of sample size. Moreover on this plot is should be visible that power for scenario 2 is lower than for scenario 1. And that I type error rate is different for scenario 3 and scenario 1.
+
+-------------------------------------------------------------------------------------------
+
+## Example for first scenario.
+```{r, warning=FALSE, message=FALSE}
+set.seed(77)
+n<-100
+
+X_1<-runif(n)
+X_2<-rep(c("lev1","lev2"), length.out=n)
+eps<-rnorm(n)
+Y<- eps+ ifelse(X_2=="lev1" & X_1<0.3, 1.5, 0.5) + ifelse(X_2=="lev2"& X_1>0.5,1,0) 
+data<-data.frame(Y,X1=X_1,X2=factor(X_2))
+```
+One can see relations in data based on the folllowing plots:
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+ggplot(data, aes(x=X1, y=Y, colour=X2)) + geom_smooth(method="lm", formula=y~x, se=FALSE, size=1) + geom_point()
+
+library(lattice)
+xyplot(Y~ X1|X2,type=c("p","r"),data=data)
+
+library(nlme)
+lmList(Y~ X1|X2,data=data)
+#As we see value of variable Y differ for different levels of categorical variable.
+
+model<-lm(Y~X1*X2, data=data)
+summary(aov(model))[[1]][3,5]
+```
+From results of ANCOVA we conclude that interactions of variables has significant contribution to variable Y.
+
+## Simulation procedure for first scenario
+In first scenario random noise in variable Y is from normal distribution.
+
+I create function "pvals" which extracts p-values for certain sample size and function "power" calculating power of the test for selected number of replications and significance level for first scenario.
+
+```{r, warning=FALSE, message=FALSE}
+
+pvals <- function(n){
+  X_1<-runif(n)
+  X_2<-rep(c("lev1","lev2"), length.out=n)
+  eps<-rnorm(n)
+  Y<- eps+ ifelse(X_2=="lev1" & X_1<0.3, 1.5, 0.5) + ifelse(X_2=="lev2"& X_1>0.5,1,0) 
+  data<-data.frame(Y,cont=X_1,categ=factor(X_2))
+  model<-lm(Y~cont*categ, data=data)
+  pval_inter<-summary(aov(model))[[1]][3,5]
+  pval_norm<-shapiro.test(rstandard(model))$p.value
+  return(c(pval_inter,pval_norm))
+}
+
+power <- function (n, alpha) {
+  p_vals <- replicate(H, pvals(n))
+  power_inter<- mean(p_vals[1,] < alpha)
+  power_norm<-mean(p_vals[2,] < alpha)
+  return(c(power_inter,power_norm))
+}
+
+```
+## Simulation procedure for second scenario
+In second scenario random noise in variable Y is from Cauchy distribution.
+
+```{r, warning=FALSE, message=FALSE}
+pvals2 <- function(n){
+  X_1<-runif(n)
+  X_2<-rep(c("lev1","lev2"), length.out=n)
+  eps<-rcauchy(n,0,1)
+  Y<- eps+ ifelse(X_2=="lev1" & X_1<0.3, 1.5, 0.5) + ifelse(X_2=="lev2"& X_1>0.5,1,0) 
+  data<-data.frame(Y,cont=X_1,categ=factor(X_2))
+  model<-lm(Y~cont*categ, data=data)
+  pval_inter<-summary(aov(model))[[1]][3,5]
+  pval_norm<-shapiro.test(rstandard(model))$p.value
+  return(c(pval_inter,pval_norm))
+}
+
+power2 <- function (n, alpha) {
+  p_vals <- replicate(H, pvals2(n))
+  power_inter<- mean(p_vals[1,] < alpha)
+  power_norm<-mean(p_vals[2,] < alpha)
+  return(c(power_inter,power_norm))
+}
+``` 
+
+## Simulation procedure for third scenario
+In third scenario random noise in variable Y is from exponential distribution.
+```{r, warning=FALSE, message=FALSE}
+pvals3 <- function(n){
+  X_1<-runif(n)
+  X_2<-rep(c("lev1","lev2"), length.out=n)
+  eps<-rexp(n, 1)
+  Y<- eps+ ifelse(X_2=="lev1" & X_1<0.3, 1.5, 0.5) + ifelse(X_2=="lev2"& X_1>0.5,1,0) 
+  data<-data.frame(Y,cont=X_1,categ=factor(X_2))
+  model<-lm(Y~cont*categ, data=data)
+  pval_inter<-summary(aov(model))[[1]][3,5]
+  pval_norm<-shapiro.test(rstandard(model))$p.value
+  return(c(pval_inter,pval_norm))
+}
+
+power3 <- function (n, alpha) {
+  p_vals <- replicate(H, pvals2(n))
+  power_inter<- mean(p_vals[1,] < alpha)
+  power_norm<-mean(p_vals[2,] < alpha)
+  return(c(power_inter,power_norm))
+}
+```
+## Results of simulations
+```{r, warning=FALSE, message=FALSE}
+H<-200
+alpha<-0.05 # significance level
+
+size <- seq(10, 140, by=1) #sample size
+power1 <- sapply(size, function (x) power(x, alpha))
+power2 <- sapply(size, function (x) power2(x, alpha))
+power3 <- sapply(size, function (x) power3(x, alpha))
+```
+
+## Power of ANCOVA
+I prepare plot that will compare power as a function of sample size for each scenario and additional plot comparing results for first and second scenario.
+
+```{r, warning=FALSE, message=FALSE}
+plot(size,power1[1,], main = "Relation between power of test and sample size", col='green')
+points(size,power2[1,], col='blue')
+points(size,power3[1,],  col='red')
+
+frame_inter<-data.frame(sample.size=rep(size,times=2), power=c(power1[1,], power2[1,]), 
+                        scenario=rep(c("scenario 1", "scenario 2"), each=length(size)))
+
+ggplot(frame_inter, aes(x=sample.size, y=power, group=scenario, colour=scenario)) + geom_line(size=1) + 
+  ggtitle("Relation between power of ANCOVA and sample size") 
+```
+
+We can observe that power for second scenario is lower than for first scenario. 
+
+## Normality of residuals 
+```{r, warning=FALSE, message=FALSE}
+frame_norm<- data.frame(sample.size=rep(size,times=2), type.1.error=c(power1[2,], power3[2,]), 
+                        scenario=rep(c("scenario 1", "scenario 3"), each=length(size))) 
+
+ggplot(frame_norm, aes(x=sample.size, y=type.1.error, group=scenario, colour=scenario)) + geom_line(size=1) + 
+  ggtitle("Relation between type I error rate and sample size")
+
+# Boxplot for average type I error for first and third scenario 
+boxplot(power1[2,], power3[2,])
+```
+
+It is clear that I type error rate is different for first scenario and third scenario.
